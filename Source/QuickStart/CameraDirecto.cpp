@@ -9,6 +9,7 @@
 // Sets default values
 ACameraDirecto::ACameraDirecto()
 : CurCameraIndex(0)
+, TimeToNextCameraChange(0.0f)
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -23,10 +24,11 @@ void ACameraDirecto::BeginPlay()
 	APlayerController* OutPlayerController = UGameplayStatics::GetPlayerController(this, 0);
 
 	if (OutPlayerController != nullptr
-		&& arrCamera.IsValidIndex(CurCameraIndex)
-		&& arrCamera[CurCameraIndex] != nullptr )
+		&& arrCameraEffect.IsValidIndex(CurCameraIndex)
+		&& arrCameraEffect[CurCameraIndex].Camera != nullptr )
 	{
-		OutPlayerController->SetViewTarget(arrCamera[CurCameraIndex]);
+		OutPlayerController->SetViewTarget(arrCameraEffect[CurCameraIndex].Camera);
+		TimeToNextCameraChange = arrCameraEffect[CurCameraIndex].TimeBetweenCameraChange;
 	}
 }
 
@@ -35,22 +37,14 @@ void ACameraDirecto::Tick( float DeltaTime )
 {
 	Super::Tick( DeltaTime );
 
-	const float TimeBetweenCameraChange	= 2.0f;
-	const float SmoothBlendTime = 0.75f;
-
-	//if (CameraOne == nullptr || CameraTwo == nullptr)
-	//	return;
-
 
 	TimeToNextCameraChange -= DeltaTime;
 
 	if (TimeToNextCameraChange <= 0.0f)
 	{
-		TimeToNextCameraChange = TimeBetweenCameraChange;
-
 		++CurCameraIndex;
 
-		if (CurCameraIndex >= arrCamera.Num())
+		if (CurCameraIndex >= arrCameraEffect.Num())
 		{
 			CurCameraIndex = 0;
 		}
@@ -61,21 +55,15 @@ void ACameraDirecto::Tick( float DeltaTime )
 		if (OutPlayerController == nullptr)
 			return;
 
-		//if (OutPlayerController->GetViewTarget() != CameraOne)
-		//{
-		//	OutPlayerController->SetViewTarget(CameraOne);
-		//}
-		//else if (OutPlayerController->GetViewTarget() != CameraTwo)
-		//{
-		//	OutPlayerController->SetViewTargetWithBlend(CameraTwo, SmoothBlendTime);
-		//}
 
-
-		if (arrCamera.IsValidIndex(CurCameraIndex) == false
-			|| arrCamera[CurCameraIndex] == nullptr)
+		if (arrCameraEffect.IsValidIndex(CurCameraIndex) == false
+			|| arrCameraEffect[CurCameraIndex].Camera == nullptr)
 			return;
 
-		OutPlayerController->SetViewTargetWithBlend(arrCamera[CurCameraIndex], SmoothBlendTime);
+		OutPlayerController->SetViewTargetWithBlend(
+			arrCameraEffect[CurCameraIndex].Camera
+			, arrCameraEffect[CurCameraIndex].SmoothBlendTime);
+		TimeToNextCameraChange = arrCameraEffect[CurCameraIndex].TimeBetweenCameraChange;
 	}
 }
 
