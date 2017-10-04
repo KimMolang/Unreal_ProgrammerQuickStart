@@ -3,6 +3,8 @@
 #include "QuickStart.h"
 #include "FPSCharacter.h"
 
+#include "FPSProjectile.h"
+
 
 // Sets default values
 AFPSCharacter::AFPSCharacter()
@@ -69,6 +71,8 @@ void AFPSCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 
 	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AFPSCharacter::StartJump);
 	PlayerInputComponent->BindAction("Jump", IE_Released, this, &AFPSCharacter::StopJump);
+
+	PlayerInputComponent->BindAction("Fire", IE_Pressed, this, &AFPSCharacter::OnFire);
 }
 
 void AFPSCharacter::MoveForward(const float _fAxisValue)
@@ -92,4 +96,40 @@ void AFPSCharacter::StartJump()
 void AFPSCharacter::StopJump()
 {
 	bPressedJump = false;
+}
+
+void AFPSCharacter::OnFire()
+{
+	if (ProjectileClass == nullptr)
+		return;
+
+
+	// 카메라 트랜스폼을 구합니다.
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	GetActorEyesViewPoint(CameraLocation, CameraRotation);
+
+	// MuzzleOffset 을 카메라 스페이스에서 월드 스페이스로 변환합니다.
+	FVector MuzzleLocation = CameraLocation							// 2. 현 카메라 위치를 더한다
+		+ FTransform(CameraRotation).TransformVector(MuzzleOffset);	// 1. 카메라 방향에 따른 총알 위치에
+	FRotator MuzzleRotation = CameraRotation;
+	// 조준을 약간 윗쪽으로 올려줍니다.
+	MuzzleRotation.Pitch += 10.0f;
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = Instigator;
+		
+		AFPSProjectile* Projectile = World->SpawnActor<AFPSProjectile>(
+			ProjectileClass, MuzzleLocation, MuzzleRotation, SpawnParams);
+
+		if (Projectile)
+		{
+			FVector LaunchDirection = MuzzleRotation.Vector();
+			Projectile->FireInDirection(LaunchDirection);
+		}
+	}
 }
