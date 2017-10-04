@@ -24,5 +24,19 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* InputComponent) override;
 
 	
-	
+public :
+	UPROPERTY(EditAnywhere)
+	USceneComponent* OurVisibleComponent;
+
+private :
+	void	Move_XAxis(const float _fAxisValue);
+	void	Move_YAxis(const float _fAxisValue);
+
+	void	StartGrowing();
+	void	StopGrowing();
+
+	FVector CurrentVelocity;
+	FVector CurrentPlusVelocity;
+
+	bool	bGrowing;
 };
