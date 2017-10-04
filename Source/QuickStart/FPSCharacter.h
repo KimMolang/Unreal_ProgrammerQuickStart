@@ -35,4 +35,11 @@ private :
 
 	UFUNCTION()
 	void StopJump();
+
+	//UPROPERTY(EditAnywhere)
+	UPROPERTY(VisibleAnywhere)
+	UCameraComponent* FPSCameraComponent;
+
+	UPROPERTY(VisibleDefaultsOnly, Category = Mesh)
+	USkeletalMeshComponent* FPSMesh;
 };
