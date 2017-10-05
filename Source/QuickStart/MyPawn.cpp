@@ -14,7 +14,7 @@ AMyPawn::AMyPawn()
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
-	AutoPossessPlayer = EAutoReceiveInput::Player0;
+	//AutoPossessPlayer = EAutoReceiveInput::Player0;
 
 	// 무언가를 붙일 더미 루트 컴포넌트
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
