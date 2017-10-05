@@ -8,6 +8,8 @@
 
 // Sets default values
 ACollidingPawn::ACollidingPawn()
+	: ZoomFactor(0.0f)
+	, bZoomingIn(false)
 {
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
@@ -70,21 +72,28 @@ ACollidingPawn::ACollidingPawn()
 
 	// 4. Spring Arm Component
 	// 스프링 암을 사용하여 카메라에 부드럽고 자연스러운 모션을 적용합니다.
-	USpringArmComponent* SpringArm
+	OurCameraSpringArm
 		= CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraAttachmentArm"));
-	SpringArm->SetupAttachment(RootComponent);
-	SpringArm->RelativeRotation = FRotator(-45.f, 0.f, 0.f);
-	SpringArm->TargetArmLength = 400.0f;
-	SpringArm->bEnableCameraLag = true;	// 카메라를 부드럽게 이동
-	SpringArm->CameraLagSpeed = 3.0f;	// 이동 스피드
+	OurCameraSpringArm->SetupAttachment(RootComponent);
+	OurCameraSpringArm->SetRelativeLocationAndRotation(
+		FVector(0.0f, 0.0f, 50.0f)
+		, FRotator(-60.0f, 0.0f, 0.0f));
+	//OurCameraSpringArm->RelativeRotation = FRotator(-45.f, 0.f, 0.f);
+	OurCameraSpringArm->TargetArmLength = 400.0f;
+
+	OurCameraSpringArm->bEnableCameraLag = true;	// 카메라를 부드럽게 이동
+	OurCameraSpringArm->bEnableCameraRotationLag = true;
+
+	OurCameraSpringArm->CameraLagSpeed = 3.0f;	// 이동 스피드
+	OurCameraSpringArm->CameraRotationLagSpeed = 3.0f;	// 이동 스피드
 
 	// 카메라를 만들어 스프링 암에 붙입니다.
 	// 실제 Camera 컴포넌트는 만들기도 쉽고,
 	// 별도의 세팅도 필요치 않습니다. Spring Arm 에는 소켓 이 내장되어 있어,
 	// 베이스가 아닌 이 곳에 붙일 수 있습니다.
-	UCameraComponent* Camera
+	OurCamera
 		= CreateDefaultSubobject<UCameraComponent>(TEXT("ActualCamera"));
-	Camera->SetupAttachment(SpringArm, USpringArmComponent::SocketName);
+	OurCamera->SetupAttachment(OurCameraSpringArm, USpringArmComponent::SocketName);
 
 	// 컴포넌트를 만들어 붙였으니,
 	// 이 폰 을 기본 플레이어가 조종하도록 설정해 줘야 합니다.
@@ -115,6 +124,46 @@ void ACollidingPawn::Tick( float DeltaTime )
 {
 	Super::Tick( DeltaTime );
 
+	if (bZoomingIn)
+	{
+		ZoomFactor += DeltaTime / 0.5f;
+	}
+	else
+	{
+		ZoomFactor -= DeltaTime / 0.5f;
+	}
+
+	ZoomFactor = FMath::Clamp<float>(ZoomFactor, 0.0f, 1.0f);
+
+	OurCamera->FieldOfView = FMath::Lerp<float>(90.0f, 60.0f, ZoomFactor);	// 시야
+	OurCameraSpringArm->TargetArmLength = FMath::Lerp<float>(400.0f, 300.0f, ZoomFactor); // 거리
+
+	//액터의 요를 회전, 붙어있는 카메라도 따라서 회전됩니다
+	{
+		FRotator NewRotation = GetActorRotation();
+		NewRotation.Yaw += CameraInput.X;
+		SetActorRotation(NewRotation);	// 액터를 직접
+	}
+
+	//카메라의 핏치를 회전하되, 항상 아래를 보도록 제한시킵니다
+	{
+		FRotator NewRotation = OurCameraSpringArm->GetComponentRotation();
+		NewRotation.Pitch = FMath::Clamp(NewRotation.Pitch + CameraInput.Y, -80.0f, -15.0f);
+		OurCameraSpringArm->SetWorldRotation(NewRotation);	// 카메라를 회전
+	}
+
+	// 이동
+	{
+		if (!MovementInput.IsZero())
+		{
+			//이동 입력 축 값에 초당 100 유닛 스케일을 적용합니다
+			MovementInput = MovementInput.SafeNormal() * 200.0f;
+			FVector NewLocation = GetActorLocation();
+			NewLocation += GetActorForwardVector() * MovementInput.X * DeltaTime;
+			NewLocation += GetActorRightVector() * MovementInput.Y * DeltaTime;
+			SetActorLocation(NewLocation);
+		}
+	}
 }
 
 // Called to bind functionality to input
@@ -124,10 +173,14 @@ void ACollidingPawn::SetupPlayerInputComponent(class UInputComponent* InputCompo
 
 	InputComponent->BindAxis("MoveX", this, &ACollidingPawn::MoveForward);
 	InputComponent->BindAxis("MoveY", this, &ACollidingPawn::MoveRight);
-	InputComponent->BindAxis("Turn", this, &ACollidingPawn::Turn);
+
+	InputComponent->BindAxis("Turn", this, &ACollidingPawn::YawCamera);
+	InputComponent->BindAxis("LookUp", this, &ACollidingPawn::PitchCamera);
 
 	InputComponent->BindAction("ParticleToggle", IE_Pressed, this, &ACollidingPawn::ParticleToggle);
 
+	InputComponent->BindAction("ParticleToggle", IE_Pressed, this, &ACollidingPawn::ZoomIn);
+	InputComponent->BindAction("ParticleToggle", IE_Released, this, &ACollidingPawn::ZoomOut);
 }
 
 UPawnMovementComponent* ACollidingPawn::GetMovementComponent() const
@@ -137,25 +190,46 @@ UPawnMovementComponent* ACollidingPawn::GetMovementComponent() const
 
 void ACollidingPawn::MoveForward(const float _fAxisValue)
 {
-	if (OurMovementComponent && (OurMovementComponent->UpdatedComponent == RootComponent))
-	{
-		OurMovementComponent->AddInputVector(GetActorForwardVector() * _fAxisValue);
-	}
+	//if (OurMovementComponent && (OurMovementComponent->UpdatedComponent == RootComponent))
+	//{
+	//	OurMovementComponent->AddInputVector(GetActorForwardVector() * _fAxisValue);
+	//	//OurMovementComponent->Velocity = FVector(200.0f);
+
+	//	//USphereComponent* SphereComponent = Cast<USphereComponent>(RootComponent);
+
+	//	//if (SphereComponent)
+	//	//{
+	//	//	GEngine->AddOnScreenDebugMessage(-1, 5.0f, FColor::Yellow, TEXT("!!!"));
+	//	//	SphereComponent->ComponentVelocity = FVector(200.0f);
+	//	//}
+	//}
+	MovementInput.X = FMath::Clamp<float>(_fAxisValue, -1.0f, 1.0f);
 }
 
 void ACollidingPawn::MoveRight(const float _fAxisValue)
 {
-	if (OurMovementComponent && (OurMovementComponent->UpdatedComponent == RootComponent))
-	{
-		OurMovementComponent->AddInputVector(GetActorRightVector() * _fAxisValue);
-	}
+	//if (OurMovementComponent && (OurMovementComponent->UpdatedComponent == RootComponent))
+	//{
+	//	OurMovementComponent->AddInputVector(GetActorRightVector() * _fAxisValue);
+	//	//OurMovementComponent->Velocity = FVector(200.0f);
+	//	
+	//	//USphereComponent* SphereComponent = Cast<USphereComponent>(RootComponent);
+
+	//	//if (SphereComponent)
+	//	//	SphereComponent->ComponentVelocity = FVector(200.0f);
+	//}
+
+	MovementInput.Y = FMath::Clamp<float>(_fAxisValue, -1.0f, 1.0f);
 }
 
-void ACollidingPawn::Turn(const float _fAxisValue)
+void ACollidingPawn::PitchCamera(const float _fAxisValue)
 {
-	FRotator NewRotation = GetActorRotation();
-	NewRotation.Yaw += _fAxisValue;
-	SetActorRotation(NewRotation);
+	CameraInput.Y = -_fAxisValue;
+}
+
+void ACollidingPawn::YawCamera(const float _fAxisValue)
+{
+	CameraInput.X = _fAxisValue;
 }
 
 void ACollidingPawn::ParticleToggle()
@@ -164,4 +238,14 @@ void ACollidingPawn::ParticleToggle()
 	{
 		OurParticleSystem->ToggleActive();
 	}
+}
+
+void ACollidingPawn::ZoomIn()
+{
+	bZoomingIn = true;
+}
+
+void ACollidingPawn::ZoomOut()
+{
+	bZoomingIn = false;
 }

@@ -37,4 +37,19 @@ public :
 
 	void Turn(const float _fAxisValue);
 	void ParticleToggle();
+
+protected :
+	USpringArmComponent* OurCameraSpringArm;
+	UCameraComponent* OurCamera;
+
+	FVector2D	MovementInput;
+	FVector2D	CameraInput;
+	float		ZoomFactor;
+	bool		bZoomingIn;
+
+	void PitchCamera(const float _fAxisValue);
+	void YawCamera(const float _fAxisValue);
+
+	void ZoomIn();
+	void ZoomOut();
 };
